@@ -1,0 +1,69 @@
+{
+  "id": "boundary",
+  "description": "Complete file, DTI just under the 43% QM threshold",
+  "documents": [
+    {
+      "file": "documents/boundary/bank-statement.pdf",
+      "expected_doc_type": "bank_statement",
+      "expected_fields": {
+        "account_last4": "4471",
+        "bank_name": "Sample Valley Credit Union",
+        "beginning_balance": 17092.55,
+        "bnpl_hits": 2,
+        "ending_balance": 18482,
+        "monthly_debt": 3082,
+        "nsf_count": 0,
+        "statement_period": "2026-08",
+        "total_deposits": 5472,
+        "total_withdrawals": 4082.55
+      }
+    },
+    {
+      "file": "documents/boundary/form-1003.pdf",
+      "expected_doc_type": "form_1003",
+      "expected_fields": {
+        "borrower_name": "Maya Bennett",
+        "loan_amount": 410000,
+        "loan_purpose": "Purchase",
+        "property_address": "118 Example Ave, Hoboken NJ 07030",
+        "stated_monthly_income": 7200
+      }
+    },
+    {
+      "file": "documents/boundary/form-1040.pdf",
+      "expected_doc_type": "form_1040",
+      "expected_fields": {
+        "adjusted_gross_income": 84900,
+        "tax_year": 2025,
+        "taxable_income": 70300,
+        "total_tax": 9420
+      }
+    },
+    {
+      "file": "documents/boundary/pay-stub.pdf",
+      "expected_doc_type": "pay_stub",
+      "expected_fields": {
+        "employer_name": "Sample Rail Works LLC",
+        "gross_pay": 3600,
+        "monthly_income": 7200,
+        "pay_period_end": "2026-08-31",
+        "ytd_gross": 57600
+      }
+    },
+    {
+      "file": "documents/boundary/w2-2025.pdf",
+      "expected_doc_type": "w2",
+      "expected_fields": {
+        "box1_wages": 86400,
+        "box2_fed_tax": 11230,
+        "employer_name": "Sample Rail Works LLC",
+        "tax_year": 2025
+      }
+    }
+  ],
+  "expected": {
+    "dti": 0.4281,
+    "recommendation": "needs_review",
+    "should_flag_low_confidence": false
+  }
+}

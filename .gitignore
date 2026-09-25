@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*.swp
+data/
+backend/data/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+eval/report.json
+artifacts/
