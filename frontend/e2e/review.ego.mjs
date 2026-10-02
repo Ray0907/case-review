@@ -168,7 +168,22 @@ try {
 
   await check("approve records the decision and audit trail", async () => {
     await page.fill("#decision-note", "Verified ending balance against source scan");
-    await page.click("loc=role:button[name='Approve']");
+    await evaluate(() => {
+      window.__originalFetch = window.fetch;
+      window.fetch = async (...args) => {
+        if (String(args[0]).endsWith('/decision')) await new Promise((resolve) => { window.__releaseDecision = resolve; });
+        return window.__originalFetch(...args);
+      };
+    });
+    try {
+      await page.click("loc=role:button[name='Approve']");
+      await page.waitForSelector('text=Recording decision…', { timeout: 2000 });
+      const pending = await evaluate(() => document.querySelector('#decision-note').disabled &&
+        [...document.querySelectorAll('.action-buttons button')].every((b) => b.disabled));
+      if (!pending) throw new Error('Decision controls remain enabled during submission');
+    } finally {
+      await evaluate(() => { window.fetch = window.__originalFetch; window.__releaseDecision?.(); });
+    }
     await waitForFunction(() => document.querySelector(".actions strong")?.textContent === "Approved", undefined, { timeout: 5000 });
     await waitForFunction(() => /field edited/i.test(document.querySelector(".audit")?.textContent ?? ""), undefined, { timeout: 5000 });
     const inputs = await evaluate(() => document.querySelectorAll('[aria-label$="flagged for review"]').length);
@@ -333,6 +348,174 @@ try {
     if (!(await disabled("Approve"))) throw new Error("Approve enabled with three documents missing");
     await shot("missing-documents");
   });
+  await check("phone decision actions are fully visible without horizontal scrolling", async () => {
+    for (const width of [320, 390]) {
+      await page.cdp("Emulation.setDeviceMetricsOverride", { width, height: 844, deviceScaleFactor: 1, mobile: false });
+      try {
+        const layout = await evaluate(() => {
+          const row = document.querySelector('.action-buttons');
+          row.scrollIntoView({ block: 'center' });
+          const bounds = row.getBoundingClientRect();
+          return { width: row.clientWidth, content: row.scrollWidth,
+            visible: [...row.querySelectorAll('button')].every((b) => b.getBoundingClientRect().right <= bounds.right + 1) };
+        });
+        await shot(`phone-actions-${width}`);
+        if (layout.content > layout.width + 1 || !layout.visible) throw new Error(JSON.stringify(layout));
+        const fontSize = await evaluate(() => parseFloat(getComputedStyle(document.querySelector('.note')).fontSize));
+        if (fontSize < 16) throw new Error(`Mobile input font is ${fontSize}px`);
+      } finally { await page.cdp('Emulation.clearDeviceMetricsOverride', {}); }
+    }
+  });
+
+  await check("switching documents discards the previous document's unsaved edit", async () => {
+    await page.click("loc=css:.doc-strip button:has-text('Form 1040')");
+    await page.click("loc=role:button[name='Edit Tax year']");
+    await page.fill('#field-tax_year', '1999');
+    await page.click("loc=css:.doc-strip button:has-text('W‑2')");
+    const stale = await evaluate(() => document.querySelector('#field-tax_year')?.value);
+    if (stale != null) throw new Error(`Unsaved tax year leaked to W-2: ${stale}`);
+  });
+
+  await check("field errors are linked to the input and editing has a visible cancel", async () => {
+    await page.click("loc=role:button[name='Edit Box 1 wages']");
+    await page.fill('#field-box1_wages', 'invalid');
+    await page.click("loc=role:button[name='Confirm value']");
+    const state = await evaluate(() => {
+      const input = document.querySelector('#field-box1_wages');
+      return { invalid: input.getAttribute('aria-invalid'),
+        error: document.getElementById(input.getAttribute('aria-describedby'))?.textContent };
+    });
+    if (state.invalid !== 'true' || !state.error?.includes('Enter a valid number')) throw new Error(JSON.stringify(state));
+    await page.click("loc=role:button[name='Cancel edit']");
+    if (await evaluate(() => !!document.querySelector('#field-box1_wages'))) throw new Error('Cancel left the editor open');
+    await waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Edit Box 1 wages', undefined, { timeout: 3000 });
+  });
+
+  await check("case loading and failure show feedback with a working retry", async () => {
+    const casePath = new URL(await page.url()).pathname.replace('/cases/', '/api/cases/');
+    await page.click('.queue-item:has-text("Confirm Example")');
+    await page.waitForSelector("loc=role:heading[name='Confirm Example']", { timeout: 5000 });
+    await evaluate((casePath) => {
+      window.__originalFetch = window.fetch;
+      window.fetch = async (...args) => {
+        if (String(args[0]) === casePath) {
+          await new Promise((resolve) => { window.__releaseCase = resolve; });
+          return new Response(JSON.stringify({ error: 'Temporary case failure' }), { status: 503 });
+        }
+        return window.__originalFetch(...args);
+      };
+    }, casePath);
+    try {
+      await page.click('.queue-item:has-text("Missing Documents Example")');
+      await page.waitForSelector('text=Loading case…', { timeout: 2000 });
+      await evaluate(() => window.__releaseCase());
+      await page.waitForSelector('text=Could not load this case.', { timeout: 3000 });
+    } finally {
+      await evaluate(() => { window.fetch = window.__originalFetch; window.__releaseCase?.(); });
+    }
+    await page.click("loc=role:button[name='Retry case']");
+    await page.waitForSelector("loc=role:heading[name='Missing Documents Example']", { timeout: 5000 });
+  });
+
+  await check("an older case response cannot replace the currently selected case", async () => {
+    const delayedPath = new URL(await page.url()).pathname.replace('/cases/', '/api/cases/');
+    await page.click('.queue-item:has-text("Confirm Example")');
+    await page.waitForSelector("loc=role:heading[name='Confirm Example']", { timeout: 5000 });
+    await evaluate((delayedPath) => {
+      window.__originalFetch = window.fetch;
+      window.__delayedCaseComplete = false;
+      delete window.__releaseCase;
+      window.fetch = async (...args) => {
+        const response = await window.__originalFetch(...args);
+        if (String(args[0]) === delayedPath) {
+          await new Promise((resolve) => { window.__releaseCase = resolve; });
+          window.__delayedCaseComplete = true;
+        }
+        return response;
+      };
+    }, delayedPath);
+    try {
+      await page.click('.queue-item:has-text("Missing Documents Example")');
+      await waitForFunction(() => !!window.__releaseCase, undefined, { timeout: 3000 });
+      await page.click('.queue-item:has-text("Confirm Example")');
+      await page.waitForSelector("loc=role:heading[name='Confirm Example']", { timeout: 5000 });
+      await evaluate(() => window.__releaseCase());
+      await waitForFunction(() => window.__delayedCaseComplete, undefined, { timeout: 3000 });
+      // Yield to the response's JSON parsing and React's render before checking.
+      await evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const heading = await evaluate(() => document.querySelector('.case-head h1')?.textContent);
+      if (heading !== 'Confirm Example') throw new Error(`Stale case replaced current case: ${heading}`);
+    } finally {
+      await evaluate(() => { window.fetch = window.__originalFetch; window.__releaseCase?.(); delete window.__releaseCase; });
+    }
+  });
+
+  await check("saving a field after changing cases cannot overwrite the new case", async () => {
+    await page.click('.queue-item:has-text("Confirm Example")');
+    await page.waitForSelector("loc=role:heading[name='Confirm Example']", { timeout: 5000 });
+    await page.click("loc=css:.doc-strip button:has-text('Bank statement')");
+    await page.click("loc=role:button[name='Edit Ending balance']");
+    await page.fill('#field-ending_balance', '18484');
+    await evaluate(() => {
+      window.__originalFetch = window.fetch;
+      window.__saveComplete = false;
+      window.fetch = async (...args) => {
+        if (args[1]?.method === 'PATCH') {
+          await new Promise((resolve) => { window.__releaseSave = resolve; });
+          const response = await window.__originalFetch(...args);
+          window.__saveComplete = true;
+          return response;
+        }
+        return window.__originalFetch(...args);
+      };
+    });
+    try {
+      await page.click("loc=role:button[name='Confirm value']");
+      await waitForFunction(() => !!window.__releaseSave, undefined, { timeout: 3000 });
+      await page.click('.queue-item:has-text("Missing Documents Example")');
+      await page.waitForSelector("loc=role:heading[name='Missing Documents Example']", { timeout: 5000 });
+      await evaluate(() => window.__releaseSave());
+      await waitForFunction(() => window.__saveComplete, undefined, { timeout: 3000 });
+      await evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const heading = await evaluate(() => document.querySelector('.case-head h1')?.textContent);
+      if (heading !== 'Missing Documents Example') throw new Error(`Field save replaced the selected case: ${heading}`);
+    } finally {
+      await evaluate(() => { window.fetch = window.__originalFetch; window.__releaseSave?.(); });
+    }
+  });
+
+  await check("a queue refresh failure preserves cases and offers a working retry", async () => {
+    await evaluate(() => {
+      window.__originalFetch = window.fetch;
+      window.fetch = (...args) => String(args[0]) === '/api/cases' && args[1]?.method !== 'POST'
+        ? Promise.resolve(new Response(JSON.stringify({ error: 'Temporary queue failure' }), { status: 503 }))
+        : window.__originalFetch(...args);
+    });
+    try {
+      await page.click("loc=role:button[name='New case']");
+      await page.fill('#borrower', 'Queue Recovery Example');
+      await page.fill('#loan-number', `HB-QUEUE-${Date.now()}`);
+      await page.fill('#amount', '180000');
+      await page.click("loc=role:button[name='Create case']");
+      await page.waitForSelector('text=Could not load the review queue.', { timeout: 5000 });
+      const count = await evaluate(() => document.querySelectorAll('.queue-item').length);
+      if (!count) throw new Error('Queue failure removed previously loaded cases');
+    } finally { await evaluate(() => { window.fetch = window.__originalFetch; }); }
+    await page.click("loc=role:button[name='Retry queue']");
+    await page.waitForSelector('.queue-item:has-text("Queue Recovery Example")', { timeout: 5000 });
+    if (await evaluate(() => !!document.querySelector('.load-error'))) throw new Error('Retry did not clear the queue error');
+  });
+
+  await check("upload errors are announced and do not carry into another case", async () => {
+    const invalidFile = path.join(out, 'invalid.txt');
+    fs.writeFileSync(invalidFile, 'Not a supported document');
+    await page.setInputFiles('[data-testid=file-input]', invalidFile);
+    await page.waitForSelector('.form-error[role="alert"]:has-text("invalid.txt")', { timeout: 5000 });
+    await page.click('.queue-item:has-text("Confirm Example")');
+    await page.waitForSelector("loc=role:heading[name='Confirm Example']", { timeout: 5000 });
+    if (await evaluate(() => [...document.querySelectorAll('.form-error')].some((el) => el.textContent.includes('invalid.txt')))) throw new Error('Upload error carried into another case');
+  });
+
 } finally {
   const failed = results.filter((r) => !r.ok).length;
   const lines = results.map((r) => `${r.ok ? "PASS" : "FAIL"} ${r.check}${r.ok ? "" : ` — ${r.detail}`}`);

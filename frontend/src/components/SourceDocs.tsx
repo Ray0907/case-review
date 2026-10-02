@@ -57,7 +57,7 @@ export default function SourceDocs({ caseId, docs, selected, onSelect, locked, o
           </>
         )}
       </div>
-      {uploadErrors.map((e) => <p key={e} className="form-error" style={{ padding: "8px 16px 0" }}>{e}</p>)}
+      {uploadErrors.map((e) => <p key={e} className="form-error" role="alert" style={{ padding: "8px 16px 0" }}>{e}</p>)}
       {!selected && <p className="empty">Add the borrower's W‑2, 1040, Form 1003, pay stub and bank statement.</p>}
       {selected && (
         <div style={{ padding: 12, display: "grid", gap: 10 }}>

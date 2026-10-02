@@ -30,13 +30,17 @@ function FieldInput({ doc, field, flagged, onSaved, onCancel }: {
     <div className="field-edit" style={{ flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
       <input className={`field-input tabular${flagged ? "" : " field-input-plain"}`} id={`field-${field.key}`}
         aria-label={flagged ? `${field.label}, flagged for review` : field.label} autoFocus={!flagged}
-        value={value} onChange={(e) => setValue(e.target.value)} disabled={busy}
+        aria-invalid={!!error} aria-describedby={error ? `field-error-${field.key}` : flagged ? `field-reason-${field.key}` : undefined}
+        value={value} onChange={(e) => { setValue(e.target.value); setError(""); }} disabled={busy}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); void save(); }
           if (e.key === "Escape" && onCancel) { e.preventDefault(); onCancel(); }
         }} />
-      <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void save()} style={{ padding: "7px 9px", fontSize: 11 }}>{busy ? "Confirming…" : "Confirm value"}</button>
-      {error && <span className="edit-hint" role="alert">{error}</span>}
+      <div className="field-edit-actions">
+        {onCancel && <button className="btn btn-ghost" type="button" disabled={busy} onClick={onCancel}>Cancel edit</button>}
+        <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Confirming…" : "Confirm value"}</button>
+      </div>
+      {error && <span id={`field-error-${field.key}`} className="edit-hint" role="alert">{error}</span>}
     </div>
   );
 }
@@ -61,15 +65,18 @@ export default function Fields({ doc, locked, onSaved }: { doc?: DocumentDetail;
             <div key={f.key} className={`field-row${flagged ? " field-flagged" : ""}`}>
               <span className="field-label">
                 {flagged ? "⚠ " : ""}{f.label}
-                {flagged && <span style={{ display: "block", fontSize: 11, marginTop: 2 }}>{f.flag_reason}</span>}
+                {flagged && <span id={`field-reason-${f.key}`} style={{ display: "block", fontSize: 11, marginTop: 2 }}>{f.flag_reason}</span>}
                 {f.edited && <span style={{ display: "block", fontSize: 11, marginTop: 2, color: "var(--ink-mute)" }}>Verified by reviewer</span>}
               </span>
               {flagged || editing_row
                 ? <FieldInput doc={doc} field={f} flagged={flagged}
-                    onSaved={(d) => { setEditing(""); onSaved(d); }} onCancel={flagged ? undefined : () => setEditing("")} />
+                    onSaved={(d) => { setEditing(""); onSaved(d); }} onCancel={flagged ? undefined : () => {
+                      setEditing("");
+                      requestAnimationFrame(() => document.getElementById(`edit-field-${f.key}`)?.focus());
+                    }} />
                 : locked
                   ? <span className="field-value tabular" style={warn_style}>{display}</span>
-                  : <button type="button" className="field-value field-value-btn tabular" aria-label={`Edit ${f.label}`}
+                  : <button id={`edit-field-${f.key}`} type="button" className="field-value field-value-btn tabular" aria-label={`Edit ${f.label}`}
                       style={warn_style} onClick={() => setEditing(f.key)}>
                       {display}
                     </button>}

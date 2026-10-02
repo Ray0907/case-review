@@ -44,7 +44,15 @@
 .note-wrap { flex: 1 0 100%; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .note-wrap .note { width: 100%; min-width: 0; }
 .note-wrap span { color: var(--ink-soft); font-size: 12px; }
-.action-buttons { display: flex; gap: 8px; max-width: 100%; overflow-x: auto; }
+.note-label { color: var(--ink-soft); font-size: 12.5px; font-weight: 600; }
+.load-error { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--bad); font-size: 13px; }
+.load-error p { margin: 0 0 10px; }
+.field-edit-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.field-edit-actions .btn { padding: 7px 9px; font-size: 12px; }
+.field-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.field-row > * { min-width: 0; overflow-wrap: anywhere; }
+.edit-hint { text-align: right; }
+.action-buttons { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .action-buttons .btn { white-space: nowrap; flex: none; }
 .action-blocker { margin: 0; padding: 0 16px 12px; background: var(--surface-sunken); color: var(--ink-soft); font-size: 12.5px; font-weight: 500; }
 @media (min-width: 900px) and (max-width: 1219px) {
@@ -64,6 +72,7 @@
   .all-cases { display: block; align-self: flex-start; color: var(--ink-soft); font-size: 13px; font-weight: 700; text-decoration: none; }
   .note-wrap { flex-basis: 100%; }
   .action-buttons { width: 100%; }
+  .input, .field-input, .note { font-size: 16px; }
 }
 @media (min-width: 900px) and (max-width: 1219px) {
   .queue-item { width: auto; }

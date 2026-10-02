@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CaseDetail, type CaseSummary, type User } from "../api";
 import { moneyWhole } from "../format";
@@ -24,14 +24,39 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
   const [docId, setDocId] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [focusAfterSave, setFocusAfterSave] = useState<string>();
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
+  const detailRequest = useRef(0);
+  const activeCaseId = useRef(caseId);
+  activeCaseId.current = caseId;
 
-  const loadCases = useCallback(() => api.listCases().then(setCases), []);
-  const loadDetail = useCallback(() => {
-    if (caseId) api.getCase(caseId).then(setDetail).catch(() => setDetail(null));
+  const loadCases = useCallback(async () => {
+    setQueueLoading(true);
+    setQueueError(false);
+    try { setCases(await api.listCases()); }
+    catch { setQueueError(true); }
+    finally { setQueueLoading(false); }
+  }, []);
+  const loadDetail = useCallback(async () => {
+    const request = ++detailRequest.current;
+    if (!caseId) return;
+    setDetailError(false);
+    try {
+      const result = await api.getCase(caseId);
+      if (request === detailRequest.current) setDetail(result);
+    } catch {
+      if (request === detailRequest.current) setDetailError(true);
+    }
   }, [caseId]);
 
-  useEffect(() => { loadCases(); }, [loadCases]);
-  useEffect(() => { setDetail(null); setDocId(undefined); loadDetail(); }, [loadDetail]);
+  useEffect(() => { void loadCases(); }, [loadCases]);
+  useEffect(() => {
+    setDetail(null); setDocId(undefined); setFocusAfterSave(undefined);
+    void loadDetail();
+    return () => { detailRequest.current++; };
+  }, [loadDetail]);
   useCaseEvents(caseId, () => { loadDetail(); loadCases(); });
   useEffect(() => {
     if (detail?.case.status !== "processing") return;
@@ -53,13 +78,17 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
     if (focusable) { focusable.focus(); setFocusAfterSave(undefined); }
   }, [detail, docId, focusAfterSave]);
 
-  function applyDetail(d: CaseDetail) { setDetail(d); loadCases(); }
+  function applyDetail(d: CaseDetail) {
+    if (d.case.id !== activeCaseId.current) return false;
+    setDetail(d); void loadCases();
+    return true;
+  }
   function savedField(d: CaseDetail) {
+    if (!applyDetail(d)) return;
     const next = d.documents.filter((doc) => doc.status !== "superseded")
       .flatMap((doc) => doc.fields.filter((field) => field.flagged && !field.edited).map((field) => ({ doc, field })))[0];
     setDocId(next?.doc.id ?? selected?.id);
     setFocusAfterSave(next ? `field-${next.field.key}` : "approve-button");
-    applyDetail(d);
   }
 
   return (
@@ -78,13 +107,18 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
             <span className="reviewer-avatar">{user.name.split(" ").map((p) => p[0]).join("")}</span>
             <span className="reviewer-name">{user.name}, {user.title}</span>
           </div>
-          <button className="btn btn-ghost" onClick={() => api.logout().then(onSignedOut)}>Sign out</button>
+          <button className="btn btn-ghost" onClick={() => api.logout().then(onSignedOut).catch(() => setSignOutError(true))}>Sign out</button>
+          {signOutError && <span className="form-error" role="alert">Could not sign out. Try again.</span>}
         </div>
       </header>
       <div className={`app${caseId && !creating ? " case-open" : ""}`}>
         <Queue cases={cases} selected={caseId} onSelect={(id) => { setCreating(false); navigate(`/cases/${id}`); }} onNew={() => setCreating(true)} />
         <main className="main" id="case-content" tabIndex={-1}>
-          {caseId && !creating && <Link className="all-cases" to="/">← All cases</Link>}
+          {caseId && !creating && <Link className="all-cases" to="/cases">← All cases</Link>}
+          {queueLoading && cases.length === 0 && <p className="empty" role="status">Loading cases…</p>}
+          {queueError && <div className="load-error" role="alert"><p>Could not load the review queue. Try again.</p><button className="btn btn-ghost" onClick={() => void loadCases()}>Retry queue</button></div>}
+          {!creating && caseId && detailError && <div className="load-error" role="alert"><p>Could not load this case. Try again.</p><button className="btn btn-ghost" onClick={() => void loadDetail()}>Retry case</button></div>}
+          {!creating && caseId && !detail && !detailError && <p className="empty" role="status">Loading case…</p>}
           {creating && <NewCase onCancel={() => setCreating(false)} onCreated={(c) => { setCreating(false); loadCases(); navigate(`/cases/${c.id}`); }} />}
           {!creating && !caseId && <p className="empty">Select a case from the queue, or create a new one.</p>}
           {!creating && detail && (
@@ -104,13 +138,13 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
                 </div>
               </div>
               <div className="columns">
-                <SourceDocs caseId={detail.case.id} docs={docs} selected={selected} onSelect={setDocId} locked={locked} onChanged={loadDetail} />
+                <SourceDocs key={detail.case.id} caseId={detail.case.id} docs={docs} selected={selected} onSelect={setDocId} locked={locked} onChanged={loadDetail} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                  <Fields doc={selected} locked={locked} onSaved={savedField} />
+                  <Fields key={selected?.id} doc={selected} locked={locked} onSaved={savedField} />
                   <Dti a={detail.assessment} />
                   <section className="card">
                     <Confidence documentJudgments={selected?.judgments ?? []} documentType={selected?.doc_type} caseJudgments={detail.case_judgments} a={detail.assessment} />
-                    <Decision detail={detail} docs={docs} unresolved={unresolved} onDecided={applyDetail} />
+                    <Decision key={detail.case.id} detail={detail} docs={docs} unresolved={unresolved} onDecided={applyDetail} />
                   </section>
                 </div>
               </div>
