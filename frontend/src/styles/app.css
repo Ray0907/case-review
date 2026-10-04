@@ -21,7 +21,7 @@
 .doc-frame { width: 100%; aspect-ratio: 4 / 5; border: 0; border-radius: 12px; background: var(--surface-sunken); }
 .source-page { position: relative; width: 100%; overflow: hidden; border-radius: 12px; }
 .source-page canvas, .source-page img { display: block; width: 100%; height: auto; }
-.source-highlight { position: absolute; box-sizing: border-box; border: 2px solid #b77500; background: rgb(255 208 64 / 30%); pointer-events: none; }
+.source-highlight { position: absolute; box-sizing: border-box; outline: 2px solid #e08a00; outline-offset: 3px; border-radius: 3px; background: rgb(255 208 64 / 35%); mix-blend-mode: multiply; pointer-events: none; }
 .source-selection { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-soft); }
 .source-selection p { margin: 0; }
 .field-source { font: inherit; color: inherit; text-align: left; padding: 3px 0; background: none; border: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
