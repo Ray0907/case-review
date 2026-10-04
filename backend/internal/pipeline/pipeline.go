@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"tidalwave/backend/internal/grounding"
 	"tidalwave/backend/internal/schemas"
 	"tidalwave/backend/internal/store"
 )
 
 type Parser interface {
-	Parse(ctx context.Context, path string) (string, error)
+	Parse(ctx context.Context, path string) (string, []grounding.Token, error)
 }
 
 type Classifier interface {
@@ -64,7 +65,7 @@ func Process(ctx context.Context, st *store.Store, stages Stages, pub Publisher,
 	}
 
 	begin("parsing")
-	text, err := stages.Parser.Parse(ctx, doc.FilePath)
+	text, tokens, err := stages.Parser.Parse(ctx, doc.FilePath)
 	if err != nil {
 		return fail("parsing", err)
 	}
@@ -93,7 +94,13 @@ func Process(ctx context.Context, st *store.Store, stages Stages, pub Publisher,
 	if errs := schemas.Validate(docType, ex.Fields); len(errs) > 0 {
 		return fail("extracting", fmt.Errorf("schema: %s", strings.Join(errs, "; ")))
 	}
-	if err := st.SaveExtraction(doc.ID, ex.Fields, ex.Uncertain); err != nil {
+	sources := make(map[string]*grounding.Box)
+	for key, value := range ex.Fields {
+		if box := grounding.Match(tokens, value); box != nil {
+			sources[key] = box
+		}
+	}
+	if err := st.SaveExtraction(doc.ID, ex.Fields, ex.Uncertain, sources); err != nil {
 		return fail("extracting", err)
 	}
 	emit("extracting", "done", "")

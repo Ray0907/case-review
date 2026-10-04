@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
+	"tidalwave/backend/internal/grounding"
 	"tidalwave/backend/internal/pipeline"
 	"tidalwave/backend/internal/schemas"
 	"tidalwave/backend/internal/store"
@@ -23,7 +26,7 @@ type Parser struct {
 	seen     map[string]bool
 }
 
-func (p *Parser) Parse(_ context.Context, path string) (string, error) {
+func (p *Parser) Parse(_ context.Context, path string) (string, []grounding.Token, error) {
 	name := strings.ToLower(filepath.Base(path))
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -33,7 +36,7 @@ func (p *Parser) Parse(_ context.Context, path string) (string, error) {
 	for k, enabled := range p.FailOnce {
 		if enabled && strings.Contains(name, k) && !p.seen[path] {
 			p.seen[path] = true
-			return "", errors.New("simulated parser outage")
+			return "", nil, errors.New("simulated parser outage")
 		}
 	}
 	raw, err := os.ReadFile(path)
@@ -43,11 +46,28 @@ func (p *Parser) Parse(_ context.Context, path string) (string, error) {
 			payload := raw[i+len("HARBOR-FIELDS:"):]
 			if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&fields); err == nil {
 				compact, _ := json.Marshal(fields)
-				return name + " HARBOR-FIELDS:" + string(compact), nil
+				return parsed(name + " HARBOR-FIELDS:" + string(compact))
 			}
 		}
 	}
-	return name, nil
+	return parsed(name)
+}
+
+// Fake boxes are synthetic evidence for exercising the UI, not PDF OCR.
+func parsed(text string) (string, []grounding.Token, error) {
+	kind, _, _ := (Classifier{}).Classify(context.Background(), text)
+	ex, _ := (Extractor{}).Extract(context.Background(), kind, text)
+	keys := make([]string, 0, len(ex.Fields))
+	for key := range ex.Fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var tokens []grounding.Token
+	for i, key := range keys {
+		tokens = append(tokens, grounding.Token{Text: fmt.Sprint(ex.Fields[key]), Group: i,
+			Box: grounding.Box{Page: 1, X: 210, Y: float64(80 + i*24), W: 160, H: 16, PageWidth: 612, PageHeight: 792}})
+	}
+	return text, tokens, nil
 }
 
 func markedFields(text string) map[string]any {

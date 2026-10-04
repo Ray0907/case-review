@@ -17,7 +17,7 @@ func TestMarkedPDFFeedsClassifierAndExtractor(t *testing.T) {
 	if err := pdf.OutputFileAndClose(path); err != nil {
 		t.Fatal(err)
 	}
-	text, err := new(Parser).Parse(context.Background(), path)
+	text, _, err := new(Parser).Parse(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestUnmarkedFileStillUsesCannedValues(t *testing.T) {
 	if err := os.WriteFile(path, []byte("old upload"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	text, err := new(Parser).Parse(context.Background(), path)
+	text, _, err := new(Parser).Parse(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}

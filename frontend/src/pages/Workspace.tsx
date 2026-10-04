@@ -22,6 +22,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [docId, setDocId] = useState<string>();
+  const [source, setSource] = useState<{ documentId: string; key: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [focusAfterSave, setFocusAfterSave] = useState<string>();
   const [queueLoading, setQueueLoading] = useState(true);
@@ -53,7 +54,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
 
   useEffect(() => { void loadCases(); }, [loadCases]);
   useEffect(() => {
-    setDetail(null); setDocId(undefined); setFocusAfterSave(undefined);
+    setDetail(null); setDocId(undefined); setFocusAfterSave(undefined); setSource(null);
     void loadDetail();
     return () => { detailRequest.current++; };
   }, [loadDetail]);
@@ -66,6 +67,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
 
   const docs = useMemo(() => (detail?.documents ?? []).filter((d) => d.status !== "superseded"), [detail]);
   const selected = docs.find((d) => d.id === docId) ?? docs.find((d) => d.fields.some((f) => f.flagged && !f.edited)) ?? docs[0];
+  const sourceField = source?.documentId === selected?.id ? selected?.fields.find((f) => f.key === source?.key) : undefined;
   const unresolved = docs.reduce((n, d) => n + d.fields.filter((f) => f.flagged && !f.edited).length, 0);
   const locked = !!detail && ["approved", "rejected", "sent_back"].includes(detail.case.status);
   const blocker = cases.find((c) => c.id === detail?.case.id)?.blocker;
@@ -138,9 +140,9 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
                 </div>
               </div>
               <div className="columns">
-                <SourceDocs key={detail.case.id} caseId={detail.case.id} docs={docs} selected={selected} onSelect={setDocId} locked={locked} onChanged={loadDetail} />
+                <SourceDocs key={detail.case.id} caseId={detail.case.id} docs={docs} selected={selected} onSelect={(id) => { setDocId(id); setSource(null); }} locked={locked} onChanged={loadDetail} sourceField={sourceField} onClearSource={() => setSource(null)} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                  <Fields key={selected?.id} doc={selected} locked={locked} onSaved={savedField} />
+                  <Fields key={selected?.id} doc={selected} locked={locked} onSaved={savedField} sourceKey={sourceField?.key} onSource={(key) => { if (selected) setSource({ documentId: selected.id, key }); }} />
                   <Dti a={detail.assessment} />
                   <section className="card">
                     <Confidence documentJudgments={selected?.judgments ?? []} documentType={selected?.doc_type} caseJudgments={detail.case_judgments} a={detail.assessment} />

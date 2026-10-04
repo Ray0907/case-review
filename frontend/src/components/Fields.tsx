@@ -45,7 +45,9 @@ function FieldInput({ doc, field, flagged, onSaved, onCancel }: {
   );
 }
 
-export default function Fields({ doc, locked, onSaved }: { doc?: DocumentDetail; locked: boolean; onSaved: (d: CaseDetail) => void }) {
+export default function Fields({ doc, locked, onSaved, sourceKey, onSource }: {
+  doc?: DocumentDetail; locked: boolean; onSaved: (d: CaseDetail) => void; sourceKey?: string; onSource: (key: string) => void;
+}) {
   const [editing, setEditing] = useState("");
   return (
     <section className="card">
@@ -64,7 +66,9 @@ export default function Fields({ doc, locked, onSaved }: { doc?: DocumentDetail;
           return (
             <div key={f.key} className={`field-row${flagged ? " field-flagged" : ""}`}>
               <span className="field-label">
-                {flagged ? "⚠ " : ""}{f.label}
+                {flagged ? "⚠ " : ""}<button type="button" className="field-source" aria-label={`Show source for ${f.label}`}
+                  aria-pressed={sourceKey === f.key} title={f.source ? "Highlight in source document" : "No unique source match"}
+                  onClick={() => onSource(f.key)}>{f.label}</button>
                 {flagged && <span id={`field-reason-${f.key}`} style={{ display: "block", fontSize: 11, marginTop: 2 }}>{f.flag_reason}</span>}
                 {f.edited && <span style={{ display: "block", fontSize: 11, marginTop: 2, color: "var(--ink-mute)" }}>Verified by reviewer</span>}
               </span>

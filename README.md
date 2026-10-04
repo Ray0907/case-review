@@ -29,6 +29,10 @@ cd backend && PIPELINE_MODE=fake go run ./cmd/server
 
 Upload PDFs from `testdata/documents/<scenario>/`. Unmarked files named `w2.pdf`, `form-1040.pdf`, `form-1003.pdf`, `pay-stub.pdf`, or `bank-statement-lowq.png` continue to use fixed fake values. Generated PDFs carry their own field values.
 
+## Source highlighting
+
+Click an extracted field's label to highlight its source on the corresponding PDF page or image. Only a unique grounded match is shown; missing sidecars, failed pages and ambiguous values leave no highlight. Editing a value clears its original grounding. Existing documents need to be uploaded again to acquire boxes; fake-mode boxes are synthetic UI fixtures, not OCR evidence.
+
 ## Demo cases
 
 1. Run in fake mode and sign in as above.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"tidalwave/backend/internal/auth"
+	"tidalwave/backend/internal/grounding"
 	"tidalwave/backend/internal/schemas"
 
 	"modernc.org/sqlite"
@@ -134,12 +135,13 @@ func (s *Store) ListDocuments(caseID string) ([]Document, error) {
 }
 
 type Field struct {
-	Key        string `json:"key"`
-	Label      string `json:"label"`
-	Value      any    `json:"value"`
-	Flagged    bool   `json:"flagged"`
-	FlagReason string `json:"flag_reason"`
-	Edited     bool   `json:"edited"`
+	Key        string         `json:"key"`
+	Label      string         `json:"label"`
+	Value      any            `json:"value"`
+	Flagged    bool           `json:"flagged"`
+	FlagReason string         `json:"flag_reason"`
+	Edited     bool           `json:"edited"`
+	Source     *grounding.Box `json:"source,omitempty"`
 }
 
 type Judgment struct {
@@ -228,7 +230,7 @@ func (s *Store) SetDocumentType(id, docType string) error {
 	return tx.Commit()
 }
 
-func (s *Store) SaveExtraction(docID string, fields map[string]any, uncertain map[string]string) error {
+func (s *Store) SaveExtraction(docID string, fields map[string]any, uncertain map[string]string, sources ...map[string]*grounding.Box) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -243,8 +245,16 @@ func (s *Store) SaveExtraction(docID string, fields map[string]any, uncertain ma
 			return err
 		}
 		reason, flagged := uncertain[k]
-		if _, err := tx.Exec(`INSERT INTO fields (document_id, key, value, flagged, flag_reason) VALUES (?, ?, ?, ?, ?)`,
-			docID, k, string(raw), flagged, reason); err != nil {
+		var source *grounding.Box
+		if len(sources) > 0 {
+			source = sources[0][k]
+		}
+		box, err := json.Marshal(source)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO fields (document_id, key, value, flagged, flag_reason, source) VALUES (?, ?, ?, ?, ?, ?)`,
+			docID, k, string(raw), flagged, reason, string(box)); err != nil {
 			return err
 		}
 	}
@@ -270,7 +280,7 @@ func (s *Store) SaveJudgments(ownerID string, js []Judgment) error {
 }
 
 func (s *Store) fieldsFor(docID, docType string) ([]Field, error) {
-	rows, err := s.db.Query(`SELECT key, value, flagged, flag_reason, edited FROM fields WHERE document_id = ?`, docID)
+	rows, err := s.db.Query(`SELECT key, value, flagged, flag_reason, edited, source FROM fields WHERE document_id = ?`, docID)
 	if err != nil {
 		return nil, err
 	}
@@ -278,11 +288,14 @@ func (s *Store) fieldsFor(docID, docType string) ([]Field, error) {
 	byKey := map[string]Field{}
 	for rows.Next() {
 		var f Field
-		var raw string
-		if err := rows.Scan(&f.Key, &raw, &f.Flagged, &f.FlagReason, &f.Edited); err != nil {
+		var raw, source string
+		if err := rows.Scan(&f.Key, &raw, &f.Flagged, &f.FlagReason, &f.Edited, &source); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(raw), &f.Value); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(source), &f.Source); err != nil {
 			return nil, err
 		}
 		byKey[f.Key] = f
@@ -430,7 +443,7 @@ func (s *Store) UpdateField(docID, key string, value any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.db.Exec(`UPDATE fields SET value = ?, edited = 1 WHERE document_id = ? AND key = ?`, string(b), docID, key)
+	_, err = s.db.Exec(`UPDATE fields SET value = ?, edited = 1, source = 'null' WHERE document_id = ? AND key = ?`, string(b), docID, key)
 	return old, err
 }
 

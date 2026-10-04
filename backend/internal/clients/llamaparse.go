@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"tidalwave/backend/internal/grounding"
 )
 
 type LlamaParse struct {
@@ -37,19 +39,44 @@ func (l *LlamaParse) do(req *http.Request, out any) error {
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
-func (l *LlamaParse) Parse(ctx context.Context, path string) (string, error) {
+// Grounding is optional: a missing, unavailable or malformed sidecar must not
+// prevent extraction. Never attach the API key to a presigned storage request.
+func (l *LlamaParse) tokenBoxes(ctx context.Context, url string) []grounding.Token {
+	if url == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil
+	}
+	res, err := l.http.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil
+	}
+	tokens, err := grounding.Decode(res.Body)
+	if err != nil {
+		return nil
+	}
+	return tokens
+}
+
+func (l *LlamaParse) Parse(ctx context.Context, path string) (string, []grounding.Token, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer f.Close()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, _ := mw.CreateFormFile("file", filepath.Base(path))
 	if _, err := io.Copy(fw, f); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	mw.WriteField("configuration", `{"tier":"agentic","version":"latest"}`)
+	mw.WriteField("configuration", `{"tier":"agentic","version":"latest","output_options":{"granular_bboxes":["word","line","cell"]}}`)
 	mw.Close()
 	req, _ := http.NewRequestWithContext(ctx, "POST", l.baseURL+"/api/v2/parse/upload", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -57,7 +84,7 @@ func (l *LlamaParse) Parse(ctx context.Context, path string) (string, error) {
 		ID string `json:"id"`
 	}
 	if err := l.do(req, &created); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	for {
 		req, _ := http.NewRequestWithContext(ctx, "GET", l.baseURL+"/api/v2/parse/"+created.ID, nil)
@@ -67,24 +94,29 @@ func (l *LlamaParse) Parse(ctx context.Context, path string) (string, error) {
 			} `json:"job"`
 		}
 		if err := l.do(req, &st); err != nil {
-			return "", err
+			return "", nil, err
 		}
 		switch st.Job.Status {
 		case "COMPLETED":
 			req, _ := http.NewRequestWithContext(ctx, "GET", l.baseURL+"/api/v2/parse/"+created.ID+"?expand=markdown_full", nil)
 			var out struct {
 				MarkdownFull string `json:"markdown_full"`
+				Metadata     struct {
+					GroundedItems struct {
+						URL string `json:"presigned_url"`
+					} `json:"grounded_items"`
+				} `json:"result_content_metadata"`
 			}
 			if err := l.do(req, &out); err != nil {
-				return "", err
+				return "", nil, err
 			}
-			return out.MarkdownFull, nil
+			return out.MarkdownFull, l.tokenBoxes(ctx, out.Metadata.GroundedItems.URL), nil
 		case "FAILED", "CANCELLED":
-			return "", fmt.Errorf("llamaparse job %s %s", created.ID, st.Job.Status)
+			return "", nil, fmt.Errorf("llamaparse job %s %s", created.ID, st.Job.Status)
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", nil, ctx.Err()
 		case <-time.After(l.pollEvery):
 		}
 	}

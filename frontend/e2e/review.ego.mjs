@@ -113,6 +113,35 @@ try {
     await shot("processed");
   });
 
+  await check("field click grounds the image and clears without stale overlays", async () => {
+    await page.click("loc=role:button[name='Show source for Ending balance']");
+    await page.waitForSelector('[data-testid="source-highlight"]', { timeout: 10000 });
+    const geometry = await evaluate(() => {
+      const box = document.querySelector('[data-testid="source-highlight"]').getBoundingClientRect();
+      const page = document.querySelector('.source-page').getBoundingClientRect();
+      return { left: box.left >= page.left, top: box.top >= page.top, right: box.right <= page.right + 1, bottom: box.bottom <= page.bottom + 1 };
+    });
+    if (Object.values(geometry).some((v) => !v)) throw new Error(JSON.stringify(geometry));
+    await shot('grounded-image');
+    await page.click("loc=role:button[name='Clear highlight']");
+    if (await evaluate(() => !!document.querySelector('[data-testid="source-highlight"]'))) throw new Error('stale image overlay');
+  });
+
+  await check("field click renders and highlights the PDF page", async () => {
+    await page.click("loc=role:button[name='W‑2']");
+    await page.click("loc=role:button[name='Show source for Box 1 wages']");
+    await page.waitForSelector('[data-testid="source-highlight"]', { timeout: 10000 });
+    const canvas = await evaluate(() => {
+      const c = document.querySelector('.source-page canvas');
+      return c && c.width > 0 && c.height > 0;
+    });
+    if (!canvas) throw new Error('PDF page was not rendered');
+    await shot('grounded-pdf');
+    await phoneWidth('grounded-pdf-phone');
+    await page.click("loc=role:button[name='Bank statement']");
+    if (await evaluate(() => !!document.querySelector('[data-testid="source-highlight"]'))) throw new Error('stale document overlay');
+  });
+
   await check("one review case uses singular topbar grammar", async () => {
     const state = await evaluate(() => ({ cases: document.querySelectorAll('.queue-item').length,
       label: document.querySelector('.topbar-meta .pill')?.textContent.trim() }));

@@ -22,8 +22,13 @@ func TestLlamaParsePollsUntilCompleted(t *testing.T) {
 			if _, _, err := r.FormFile("file"); err != nil {
 				t.Errorf("missing file: %v", err)
 			}
-			if r.FormValue("configuration") == "" {
-				t.Error("missing configuration")
+			var cfg struct {
+				OutputOptions struct {
+					GranularBboxes []string `json:"granular_bboxes"`
+				} `json:"output_options"`
+			}
+			if err := json.Unmarshal([]byte(r.FormValue("configuration")), &cfg); err != nil || len(cfg.OutputOptions.GranularBboxes) != 3 {
+				t.Error("missing granular bbox configuration")
 			}
 			json.NewEncoder(w).Encode(map[string]string{"id": "job1"})
 		case r.URL.Path == "/api/v2/parse/job1" && r.URL.Query().Get("expand") == "markdown_full":
@@ -43,7 +48,10 @@ func TestLlamaParsePollsUntilCompleted(t *testing.T) {
 	os.WriteFile(p, []byte("%PDF-1.4"), 0o644)
 	lp := NewLlamaParse(srv.URL, "k")
 	lp.pollEvery = 0
-	text, err := lp.Parse(context.Background(), p)
+	text, boxes, err := lp.Parse(context.Background(), p)
+	if len(boxes) != 0 {
+		t.Fatal("missing sidecar must yield no boxes")
+	}
 	if err != nil || text != "# Bank statement\nEnding balance 18,482.00" {
 		t.Fatalf("text %q err %v", text, err)
 	}
@@ -62,7 +70,7 @@ func TestLlamaParseFailedJob(t *testing.T) {
 	os.WriteFile(p, []byte("%PDF-1.4"), 0o644)
 	lp := NewLlamaParse(srv.URL, "k")
 	lp.pollEvery = 0
-	if _, err := lp.Parse(context.Background(), p); err == nil {
+	if _, _, err := lp.Parse(context.Background(), p); err == nil {
 		t.Fatal("want error")
 	}
 }

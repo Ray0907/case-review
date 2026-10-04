@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS fields (
   document_id TEXT NOT NULL REFERENCES documents(id), key TEXT NOT NULL, value TEXT NOT NULL,
   flagged INTEGER NOT NULL DEFAULT 0, flag_reason TEXT NOT NULL DEFAULT '', edited INTEGER NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'null',
   PRIMARY KEY (document_id, key));
 CREATE TABLE IF NOT EXISTS judgments (
   owner_id TEXT NOT NULL, name TEXT NOT NULL, score REAL NOT NULL, reason TEXT NOT NULL,
@@ -47,6 +48,17 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
+	}
+	var hasSource int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('fields') WHERE name = 'source'`).Scan(&hasSource); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if hasSource == 0 {
+		if _, err := db.Exec(`ALTER TABLE fields ADD COLUMN source TEXT NOT NULL DEFAULT 'null'`); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	return &Store{db: db}, nil
 }

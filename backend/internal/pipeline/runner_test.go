@@ -72,16 +72,16 @@ func TestFakeParserFailsOncePerFile(t *testing.T) {
 	first := "/tmp/one-pay-stub-fail-once.pdf"
 	second := "/tmp/two-pay-stub-fail-once.pdf"
 	for _, path := range []string{first, second} {
-		if _, err := parser.Parse(context.Background(), path); err == nil {
+		if _, _, err := parser.Parse(context.Background(), path); err == nil {
 			t.Fatalf("first parse of %s should fail", path)
 		}
 	}
 	for _, path := range []string{first, second} {
-		if text, err := parser.Parse(context.Background(), path); err != nil || text == "" {
+		if text, _, err := parser.Parse(context.Background(), path); err != nil || text == "" {
 			t.Fatalf("retry %s: %q, %v", path, text, err)
 		}
 	}
-	if _, err := parser.Parse(context.Background(), "/tmp/ordinary-pay-stub.pdf"); err != nil {
+	if _, _, err := parser.Parse(context.Background(), "/tmp/ordinary-pay-stub.pdf"); err != nil {
 		t.Fatalf("ordinary file failed: %v", err)
 	}
 }

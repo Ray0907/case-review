@@ -53,7 +53,7 @@ func TestLiveLlamaParseAndJev(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	text, err := NewLlamaParse(cfg.LlamaParseURL, cfg.LlamaParseKey).Parse(ctx, path)
+	text, _, err := NewLlamaParse(cfg.LlamaParseURL, cfg.LlamaParseKey).Parse(ctx, path)
 	if err != nil {
 		if strings.Contains(err.Error(), "llamaparse POST /api/v2/parse/upload: 404") {
 			t.Fatal("LlamaParse live smoke: HTTP 404 POST /api/v2/parse/upload")

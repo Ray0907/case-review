@@ -8,7 +8,8 @@ export type CaseRecord = {
   requested_amount: number; status: CaseStatus; created_at: number;
 };
 export type CaseSummary = CaseRecord & { recommendation: Recommendation; doc_count: number; blocker: string };
-export type Field = { key: string; label: string; value: string | number; flagged: boolean; flag_reason: string; edited: boolean };
+export type SourceBox = { page: number; x: number; y: number; w: number; h: number; page_width: number; page_height: number };
+export type Field = { key: string; label: string; value: string | number; flagged: boolean; flag_reason: string; edited: boolean; source?: SourceBox };
 export type Judgment = { name: string; score: number; low: boolean; reason: string };
 export type DocumentDetail = {
   id: string; case_id: string; file_name: string; doc_type: string; status: DocStatus;

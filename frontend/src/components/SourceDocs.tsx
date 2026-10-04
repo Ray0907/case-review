@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type DocumentDetail } from "../api";
+import { api, type DocumentDetail, type Field } from "../api";
+import SourceHighlight from "./SourceHighlight";
 import { docLabel, requiredLabel, requiredTypes, stageLabel } from "../format";
 
 const busy = new Set(["pending", "parsing", "classifying", "extracting", "judging"]);
 
-export default function SourceDocs({ caseId, docs, selected, onSelect, locked, onChanged }: {
+export default function SourceDocs({ caseId, docs, selected, onSelect, locked, onChanged, sourceField, onClearSource }: {
   caseId: string; docs: DocumentDetail[]; selected?: DocumentDetail; onSelect: (id: string) => void; locked: boolean; onChanged: () => void;
+  sourceField?: Field; onClearSource: () => void;
 }) {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -70,10 +72,17 @@ export default function SourceDocs({ caseId, docs, selected, onSelect, locked, o
           )}
           {retryError && <p className="form-error" role="alert">{retryError}</p>}
           {selected.status === "unsupported" && <div className="scan-flag" style={{ marginTop: 0 }}>Not a supported document type. Upload a W‑2, 1040, Form 1003, pay stub or bank statement.</div>}
+          {sourceField && <div className="source-selection">
+            <p role="status">{sourceField.source ? `${sourceField.label} · Page ${sourceField.source.page}` : `${sourceField.label}: no unique source match.`}</p>
+            <button type="button" className="btn btn-ghost" onClick={onClearSource}>Clear highlight</button>
+          </div>}
+          {sourceField?.source ? <SourceHighlight key={`${selected.id}-${sourceField.source.page}`} url={`/api/documents/${selected.id}/file`}
+            image={!!isImage} box={sourceField.source} label={`${docLabel(selected.doc_type, "Document")} source`} /> : <>
           {previewFailed && <p className="form-error" role="alert">Preview unavailable.</p>}
           {!previewFailed && (isImage
             ? <img className="doc-frame" style={{ objectFit: "contain" }} src={`/api/documents/${selected.id}/file`} onError={() => setPreviewFailed(true)} alt={`${docLabel(selected.doc_type, "Document")} source scan`} />
             : <iframe className="doc-frame" src={`/api/documents/${selected.id}/file`} title={`${docLabel(selected.doc_type, "Document")} source`} />)}
+          </>}
           <p className="scan-caption" style={{ padding: 0 }}>{selected.file_name} · <a href={`/api/documents/${selected.id}/file`} target="_blank" rel="noopener noreferrer">Open the original file</a></p>
         </div>
       )}
