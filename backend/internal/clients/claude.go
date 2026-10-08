@@ -12,6 +12,9 @@ import (
 	"tidalwave/backend/internal/schemas"
 )
 
+// DefaultModel is used for every Claude call in this app: field extraction and case questions.
+const DefaultModel = "claude-opus-5-5"
+
 type ClaudeOptions struct {
 	APIKey         string
 	BaseURL        string
@@ -40,7 +43,7 @@ func NewClaude(o ClaudeOptions) *Claude {
 		opts = append(opts, option.WithHeader("X-Spanbox-Token", o.SpanboxToken))
 	}
 	if o.Model == "" {
-		o.Model = "claude-opus-5"
+		o.Model = DefaultModel
 	}
 	return &Claude{client: anthropic.NewClient(opts...), model: o.Model}
 }

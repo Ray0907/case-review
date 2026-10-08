@@ -24,7 +24,7 @@ func RealStages(cfg config.Config) (pipeline.Stages, error) {
 		Parser:     NewLlamaParse(cfg.LlamaParseURL, cfg.LlamaParseKey),
 		Classifier: jev,
 		Extractor: NewClaude(ClaudeOptions{BaseURL: cfg.AnthropicBaseURL, SpanboxSession: cfg.SpanboxSession,
-			SpanboxToken: cfg.SpanboxToken, Model: "claude-opus-5"}),
+			SpanboxToken: cfg.SpanboxToken, Model: DefaultModel}),
 		Judge: jev,
 	}, nil
 }

@@ -19,7 +19,7 @@ func TestClaudeExtractUsesProxyAndSessionHeader(t *testing.T) {
 		}
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		if body["model"] != "claude-opus-5" {
+		if body["model"] != DefaultModel {
 			t.Errorf("model %v", body["model"])
 		}
 		system := body["system"].([]any)[0].(map[string]any)["text"].(string)
@@ -34,7 +34,7 @@ func TestClaudeExtractUsesProxyAndSessionHeader(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5",
+			"id": "msg_1", "type": "message", "role": "assistant", "model": DefaultModel,
 			"stop_reason": "tool_use", "usage": map[string]int{"input_tokens": 10, "output_tokens": 10},
 			"content": []any{map[string]any{"type": "tool_use", "id": "tu_1", "name": "record_fields",
 				"input": map[string]any{
@@ -44,7 +44,7 @@ func TestClaudeExtractUsesProxyAndSessionHeader(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	c := NewClaude(ClaudeOptions{BaseURL: srv.URL, SpanboxSession: "eval-1", APIKey: "test", Model: "claude-opus-5"})
+	c := NewClaude(ClaudeOptions{BaseURL: srv.URL, SpanboxSession: "eval-1", APIKey: "test", Model: DefaultModel})
 	ex, err := c.Extract(context.Background(), "w2", "W-2 text")
 	if err != nil {
 		t.Fatal(err)
@@ -70,11 +70,11 @@ func TestBankWithdrawalIsOptionalInExtractionSchema(t *testing.T) {
 func TestClaudeRefusalIsAnError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"id": "m", "type": "message", "role": "assistant", "model": "claude-opus-5",
+		json.NewEncoder(w).Encode(map[string]any{"id": "m", "type": "message", "role": "assistant", "model": DefaultModel,
 			"stop_reason": "refusal", "content": []any{}, "usage": map[string]int{"input_tokens": 1, "output_tokens": 0}})
 	}))
 	defer srv.Close()
-	c := NewClaude(ClaudeOptions{BaseURL: srv.URL, APIKey: "test", Model: "claude-opus-5"})
+	c := NewClaude(ClaudeOptions{BaseURL: srv.URL, APIKey: "test", Model: DefaultModel})
 	if _, err := c.Extract(context.Background(), "w2", "x"); err == nil {
 		t.Fatal("want refusal error")
 	}

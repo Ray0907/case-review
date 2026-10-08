@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"tidalwave/backend/internal/qa"
 	"tidalwave/backend/internal/sse"
 	"tidalwave/backend/internal/store"
 )
@@ -24,6 +25,7 @@ type Options struct {
 	UploadDir string
 	Runner    Runner
 	Broker    *sse.Broker
+	Asker     qa.Asker
 }
 
 type Server struct {
@@ -61,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/documents/{id}/fields/{key}", s.requireUser(s.editField))
 	s.mux.HandleFunc("POST /api/cases/{id}/decision", s.requireUser(s.decide))
 	s.mux.HandleFunc("GET /api/cases/{id}/audit", s.requireUser(s.audit))
+	s.mux.HandleFunc("POST /api/cases/{id}/ask", s.requireUser(s.ask))
 	if s.opts.StaticDir != "" {
 		files := http.FileServer(http.Dir(s.opts.StaticDir))
 		s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
