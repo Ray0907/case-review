@@ -31,7 +31,7 @@ Upload PDFs from `testdata/documents/<scenario>/`. Unmarked files named `w2.pdf`
 
 ## Source highlighting
 
-Click an extracted field's label to highlight its source on the corresponding PDF page or image. Only a unique grounded match is shown; missing sidecars, failed pages and ambiguous values leave no highlight. Editing a value clears its original grounding. Existing documents need to be uploaded again to acquire boxes; fake-mode boxes are synthetic UI fixtures, not OCR evidence.
+Select an extracted field's label to highlight its source on the corresponding PDF page or image. Only a unique grounded match is shown; missing sidecars, failed pages and ambiguous values leave no highlight. Editing a value clears its original grounding. Existing documents need to be uploaded again to acquire boxes; fake-mode boxes are synthetic UI fixtures, not OCR evidence.
 
 ## Demo cases
 
