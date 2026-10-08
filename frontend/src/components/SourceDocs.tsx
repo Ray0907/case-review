@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, type DocumentDetail, type Field } from "../api";
-import SourceHighlight from "./SourceHighlight";
+import SourceViewer from "./SourceViewer";
 import { docLabel, requiredLabel, requiredTypes, stageLabel } from "../format";
 
 const busy = new Set(["pending", "parsing", "classifying", "extracting", "judging"]);
@@ -13,8 +13,6 @@ export default function SourceDocs({ caseId, docs, selected, onSelect, locked, o
   const [uploading, setUploading] = useState(false);
   const [retryError, setRetryError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  useEffect(() => { setPreviewFailed(false); }, [selected?.id]);
   const received = docs.filter((d) => d.status === "done").length;
   const missing = requiredTypes.filter((type) => !docs.some((d) => d.doc_type === type));
 
@@ -53,7 +51,7 @@ export default function SourceDocs({ caseId, docs, selected, onSelect, locked, o
         {!locked && (
           <>
             <button className="doc-thumb" type="button" aria-label="Add documents" disabled={uploading} onClick={() => fileInput.current?.click()}>
-              <span aria-hidden="true" style={{ fontSize: 18 }}>+</span>{uploading ? "Uploading…" : "Add"}
+              <span aria-hidden="true" style={{ fontSize: 16 }}>+</span>{uploading ? "Uploading…" : "Add"}
             </button>
             <input ref={fileInput} type="file" multiple accept=".pdf,.png,.jpg,.jpeg" hidden onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} data-testid="file-input" aria-label="Add PDF, PNG or JPEG documents" />
           </>
@@ -72,17 +70,9 @@ export default function SourceDocs({ caseId, docs, selected, onSelect, locked, o
           )}
           {retryError && <p className="form-error" role="alert">{retryError}</p>}
           {selected.status === "unsupported" && <div className="scan-flag" style={{ marginTop: 0 }}>Not a supported document type. Upload a W‑2, 1040, Form 1003, pay stub or bank statement.</div>}
-          {sourceField && <div className="source-selection">
-            <p role="status">{sourceField.source ? `${sourceField.label} · Page ${sourceField.source.page}` : `${sourceField.label}: no unique source match.`}</p>
-            <button type="button" className="btn btn-ghost" onClick={onClearSource}>Clear highlight</button>
-          </div>}
-          {sourceField?.source ? <SourceHighlight key={`${selected.id}-${sourceField.source.page}`} url={`/api/documents/${selected.id}/file`}
-            image={!!isImage} box={sourceField.source} label={`${docLabel(selected.doc_type, "Document")} source`} /> : <>
-          {previewFailed && <p className="form-error" role="alert">Preview unavailable.</p>}
-          {!previewFailed && (isImage
-            ? <img className="doc-frame" style={{ objectFit: "contain" }} src={`/api/documents/${selected.id}/file`} onError={() => setPreviewFailed(true)} alt={`${docLabel(selected.doc_type, "Document")} source scan`} />
-            : <iframe className="doc-frame" src={`/api/documents/${selected.id}/file`} title={`${docLabel(selected.doc_type, "Document")} source`} />)}
-          </>}
+          <SourceViewer key={selected.id} url={`/api/documents/${selected.id}/file`} image={!!isImage}
+            box={sourceField?.source} label={`${docLabel(selected.doc_type, "Document")} source`}
+            selection={sourceField ? { onClear: onClearSource, text: sourceField.source ? `${sourceField.label}${sourceField.source.page > 1 ? ` · on page ${sourceField.source.page}` : ""}` : `${sourceField.label}: no unique source match.` } : undefined} />
           <p className="scan-caption" style={{ padding: 0 }}>{selected.file_name} · <a href={`/api/documents/${selected.id}/file`} target="_blank" rel="noopener noreferrer">Open the original file</a></p>
         </div>
       )}

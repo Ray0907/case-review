@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError, type AuditEntry, type CaseDetail, type DocumentDetail } from "../api";
-import { listLabels, sentenceLabel, requiredTypes, reviewTime } from "../format";
+import { listLabels, sentenceLabel, requiredTypes, relativeTime, reviewTime } from "../format";
 
 const done: Record<string, string> = { approved: "Approved", rejected: "Rejected", sent_back: "Sent back" };
 
@@ -9,14 +9,8 @@ export default function Decision({ detail, docs, unresolved, onDecided }: { deta
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const decidedLine = useRef<HTMLDivElement>(null);
-  const [focusDecided, setFocusDecided] = useState(false);
   const status = detail.case.status;
   const decided = status in done;
-
-  useEffect(() => {
-    if (decided && focusDecided) { decidedLine.current?.focus(); setFocusDecided(false); }
-  }, [decided, focusDecided]);
 
   useEffect(() => {
     api.audit(detail.case.id).then(setAudit).catch(() => setError("Could not load the audit trail. Refresh this case to try again."));
@@ -28,7 +22,6 @@ export default function Decision({ detail, docs, unresolved, onDecided }: { deta
     setError("");
     try {
       onDecided(await api.decide(detail.case.id, action, note));
-      setFocusDecided(true);
       setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not record decision. Try again.");
@@ -43,8 +36,9 @@ export default function Decision({ detail, docs, unresolved, onDecided }: { deta
   const approveBlocked = !!blockedReason;
   return (
     <>
+      <div className="decision-bar">
       {decided ? (
-        <div className="actions" ref={decidedLine} tabIndex={-1}><strong>{done[status]}</strong><span className="queue-loan">by {audit[0]?.user_name} · {audit[0] && reviewTime(audit[0].created_at)}</span></div>
+        <div className="actions"><strong>{done[status]}</strong><span className="queue-loan">by {audit[0]?.user_name} · {audit[0] && <time dateTime={new Date(audit[0].created_at * 1000).toISOString()} title={reviewTime(audit[0].created_at)}>{relativeTime(audit[0].created_at)}</time>}</span></div>
       ) : (
         <>
           <div className="actions" aria-busy={busy}>
@@ -65,11 +59,6 @@ export default function Decision({ detail, docs, unresolved, onDecided }: { deta
         </>
       )}
       {error && <p className="form-error" role="alert" style={{ padding: "0 16px 10px" }}>{error}</p>}
-      <div className="audit" style={{ flexDirection: "column", alignItems: "flex-start" }}>
-        <span>Every decision and field edit is written to the audit log with reviewer and time.</span>
-        {audit.slice(0, 5).map((e) => (
-          <span key={e.id} className="tabular">{reviewTime(e.created_at)} · {e.user_name} · {e.action.replace("_", " ")}{e.note ? ` — ${e.note}` : ""}</span>
-        ))}
       </div>
     </>
   );

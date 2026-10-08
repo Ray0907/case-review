@@ -5,6 +5,8 @@ export const money = (n: number | null | undefined) => (n == null ? "—" : usd.
 export const moneyWhole = (n: number | null | undefined) => (n == null ? "—" : whole.format(n));
 export const pct = (n: number | null | undefined, digits = 1) => (n == null ? "—" : `${(n * 100).toFixed(digits)}%`);
 const dateTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+const shortDateTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+export const shortTime = (seconds: number) => shortDateTime.format(new Date(seconds * 1000));
 export const reviewTime = (seconds: number) => dateTime.format(new Date(seconds * 1000));
 
 const labels: Record<string, string> = {
@@ -28,3 +30,15 @@ export const judgmentLabel = (n: string) =>
 export const moneyKeys = new Set(["box1_wages", "box2_fed_tax", "adjusted_gross_income", "taxable_income", "total_tax", "loan_amount",
   "stated_monthly_income", "gross_pay", "ytd_gross", "monthly_income", "beginning_balance", "ending_balance", "total_deposits", "total_withdrawals", "monthly_debt"]);
 export const fieldDisplay = (key: string, v: string | number) => (typeof v === "number" && moneyKeys.has(key) ? money(v) : String(v));
+
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+// Recent times read as "3 hours ago"; anything older than a week falls back to the short date.
+export function relativeTime(seconds: number, now_ms = Date.now()) {
+	const diff = Math.round((seconds * 1000 - now_ms) / 1000);
+	const abs = Math.abs(diff);
+	if (abs < 60) return "Just now";
+	if (abs < 3600) return relative.format(Math.round(diff / 60), "minute");
+	if (abs < 86400) return relative.format(Math.round(diff / 3600), "hour");
+	if (abs < 7 * 86400) return relative.format(Math.round(diff / 86400), "day");
+	return shortTime(seconds);
+}

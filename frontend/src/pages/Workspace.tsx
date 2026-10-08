@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type CaseDetail, type CaseSummary, type User } from "../api";
-import { moneyWhole } from "../format";
+import { api, type CaseDetail, type CaseSummary, type DocumentDetail, type User } from "../api";
+import { pct, requiredTypes } from "../format";
 import { useCaseEvents } from "../useCaseEvents";
 import Queue from "../components/Queue";
 import NewCase from "../components/NewCase";
 import SourceDocs from "../components/SourceDocs";
 import Fields from "../components/Fields";
-import Dti from "../components/Dti";
+import Figures from "../components/Figures";
+import Progress from "../components/Progress";
+import DecisionReceipt from "../components/DecisionReceipt";
+import Analysis from "../components/Analysis";
+import AuditLog from "../components/AuditLog";
+import AskPanel from "../components/AskPanel";
+import { clearAllHistory } from "../askHistory";
 import Confidence from "../components/Confidence";
 import Decision from "../components/Decision";
 
@@ -15,6 +21,22 @@ const statusPill: Record<string, [string, string]> = {
   processing: ["pill-info", "Processing"], needs_review: ["pill-warn", "Needs review"], ready: ["pill-good", "Ready for decision"],
   approved: ["pill-good", "Approved"], rejected: ["pill-bad", "Rejected"], sent_back: ["pill-warn", "Sent back"],
 };
+
+const decided_label: Record<string, string> = { approved: "Approved", rejected: "Rejected", sent_back: "Sent back" };
+const processing_states = ["pending", "parsing", "classifying", "extracting", "judging"];
+
+function reviewSteps(detail: CaseDetail, docs: DocumentDetail[], unresolved: number) {
+  const received = docs.filter((d) => d.status === "done").length;
+  const dti = detail.assessment?.dti ?? null;
+  const decided = detail.case.status in decided_label;
+  const processing = docs.some((d) => processing_states.includes(d.status));
+  return [
+    { label: "Documents", meta: `${received} of ${requiredTypes.length}`, done: received >= requiredTypes.length && !processing },
+    { label: "Verify", meta: unresolved > 0 ? `${unresolved} to check` : "All checked", done: unresolved === 0 && received > 0 },
+    { label: "Assess", meta: dti == null ? "Waiting" : pct(dti), done: dti != null },
+    { label: "Decide", meta: decided ? decided_label[detail.case.status] : "Pending", done: decided },
+  ];
+}
 
 export default function Workspace({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const { caseId } = useParams();
@@ -30,6 +52,14 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
   const [detailError, setDetailError] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const detailRequest = useRef(0);
+  const topbar = useRef<HTMLElement>(null);
+  const receipt = useRef<HTMLElement>(null);
+  const [focusReceipt, setFocusReceipt] = useState(false);
+  useEffect(() => {
+    const onScroll = () => topbar.current?.classList.toggle("scrolled", window.scrollY > 4);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const activeCaseId = useRef(caseId);
   activeCaseId.current = caseId;
 
@@ -80,6 +110,24 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
     if (focusable) { focusable.focus(); setFocusAfterSave(undefined); }
   }, [detail, docId, focusAfterSave]);
 
+  useEffect(() => {
+    if (!focusReceipt || !receipt.current) return;
+    receipt.current.focus();
+    setFocusReceipt(false);
+  }, [focusReceipt, detail]);
+
+  function openCitation(document_type: string, key: string) {
+    if (document_type === "assessment") {
+      document.querySelector(".figures")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    const doc = docs.find((d) => d.doc_type === document_type);
+    if (!doc) return;
+    setDocId(doc.id);
+    setSource({ documentId: doc.id, key });
+    window.setTimeout(() => document.querySelector(".pdf-viewer")?.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
+  }
+
   function applyDetail(d: CaseDetail) {
     if (d.case.id !== activeCaseId.current) return false;
     setDetail(d); void loadCases();
@@ -96,7 +144,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
   return (
     <>
       {caseId && !creating && <a className="skip-case" href="#case-content">Skip to case</a>}
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none"><path d="M3 12c3-4 6-4 9 0s6 4 9 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>
@@ -109,7 +157,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
             <span className="reviewer-avatar">{user.name.split(" ").map((p) => p[0]).join("")}</span>
             <span className="reviewer-name">{user.name}, {user.title}</span>
           </div>
-          <button className="btn btn-ghost" onClick={() => api.logout().then(onSignedOut).catch(() => setSignOutError(true))}>Sign out</button>
+          <button className="btn btn-ghost" onClick={() => api.logout().then(() => { clearAllHistory(); onSignedOut(); }).catch(() => setSignOutError(true))}>Sign out</button>
           {signOutError && <span className="form-error" role="alert">Could not sign out. Try again.</span>}
         </div>
       </header>
@@ -135,25 +183,36 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
                   <div className="case-sub">
                     <span><span className="m-label">Loan #</span> <span className="m-val">{detail.case.loan_number}</span></span>
                     <span className="m-val">{detail.case.loan_product}</span>
-                    <span><span className="m-label">Requested</span> <span className="m-val tabular">{moneyWhole(detail.case.requested_amount)}</span></span>
                   </div>
                 </div>
               </div>
+              {detail.case.status in decided_label && (
+                <DecisionReceipt detail={detail} docs={docs} panel={receipt}
+                  next={cases.filter((c) => c.id !== detail.case.id && c.status === "needs_review").sort((a, b) => b.created_at - a.created_at)[0]}
+                  onNext={(id) => navigate(`/cases/${id}`)} onQueue={() => navigate("/cases")} />
+              )}
+              <Progress steps={reviewSteps(detail, docs, unresolved)} />
+              <Figures a={detail.assessment} requested={detail.case.requested_amount} />
               <div className="columns">
-                <SourceDocs key={detail.case.id} caseId={detail.case.id} docs={docs} selected={selected} onSelect={(id) => { setDocId(id); setSource(null); }} locked={locked} onChanged={loadDetail} sourceField={sourceField} onClearSource={() => setSource(null)} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  <SourceDocs key={detail.case.id} caseId={detail.case.id} docs={docs} selected={selected} onSelect={(id) => { setDocId(id); setSource(null); }} locked={locked} onChanged={loadDetail} sourceField={sourceField} onClearSource={() => setSource(null)} />
+                  <AuditLog detail={detail} />
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <Fields key={selected?.id} doc={selected} locked={locked} onSaved={savedField} sourceKey={sourceField?.key} onSource={(key) => { if (selected) setSource({ documentId: selected.id, key }); }} />
-                  <Dti a={detail.assessment} />
-                  <section className="card">
+                  <Analysis docs={docs} assessment={detail.assessment} />
+                  <section className="card card-quiet">
                     <Confidence documentJudgments={selected?.judgments ?? []} documentType={selected?.doc_type} caseJudgments={detail.case_judgments} a={detail.assessment} />
-                    <Decision key={detail.case.id} detail={detail} docs={docs} unresolved={unresolved} onDecided={applyDetail} />
                   </section>
                 </div>
               </div>
+              <Decision key={detail.case.id} detail={detail} docs={docs} unresolved={unresolved} onDecided={(d) => { if (applyDetail(d)) setFocusReceipt(true); }} />
             </>
           )}
         </main>
       </div>
+      {!creating && caseId && detail?.case.id === caseId && detail.case.status in decided_label &&
+        <AskPanel key={`${user.id}:${caseId}`} userId={user.id} detail={detail} docs={docs} onCite={openCitation} />}
     </>
   );
 }

@@ -17,7 +17,10 @@ function Group({ label, judgments }: { label: string; judgments: Judgment[] }) {
           <div className="conf-name">{judgmentLabel(j.name)}</div>
           <div className="conf-reason">{j.reason}</div>
         </div>
-        <span className={`conf-score ${j.low ? "warn" : "good"} tabular`}>{Math.round(j.score * 100)}%</span>
+        <span className="conf-figure">
+          <span className={`conf-score ${j.low ? "warn" : "good"} tabular`}>{Math.round(j.score * 100)}%</span>
+          <span className="conf-meter" aria-hidden="true"><span className={j.low ? "warn" : ""} style={{ width: `${Math.round(j.score * 100)}%` }} /></span>
+        </span>
       </div>)}
     </div>
   </div>;

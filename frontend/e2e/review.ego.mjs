@@ -20,12 +20,13 @@ const evaluate = (...args) => retryCdp(() => page.evaluate(...args));
 const waitForFunction = (...args) => retryCdp(() => page.waitForFunction(...args));
 async function waitForPdfPreview() {
   await waitForFunction(() => {
-    const frame = document.querySelector('iframe.doc-frame');
-    return frame?.contentDocument?.URL === frame?.src && frame.contentDocument.readyState === 'complete';
+    const viewer = document.querySelector('.pdf-viewer');
+    const canvases = [...document.querySelectorAll('.pdf-viewer canvas')];
+    return viewer?.dataset.state === 'ready' && canvases.length > 0 && canvases.every((c) => c.width > 0 && c.height > 0);
   }, undefined, { timeout: 10000 });
 }
 async function shot(name) {
-  if (await evaluate(() => !!document.querySelector('iframe.doc-frame'))) await waitForPdfPreview();
+  if (await evaluate(() => !!document.querySelector('.pdf-viewer canvas'))) await waitForPdfPreview();
   step += 1;
   const file = path.join(out, `step-${String(step).padStart(2, "0")}-${name}.png`);
   await retryCdp(() => page.screenshot({ path: file }));
@@ -113,6 +114,19 @@ try {
     await shot("processed");
   });
 
+  await check("cross-check charts match their table view", async () => {
+    await page.waitForSelector('.analysis [data-chart]', { timeout: 5000 });
+    const before = await evaluate(() => [...document.querySelectorAll('.analysis [data-chart]')].map((c) => ({
+      id: c.dataset.chart, bars: c.querySelectorAll('.bar-row').length,
+      values: [...c.querySelectorAll('.bar-value')].map((v) => v.textContent.trim()) })));
+    if (before.length === 0 || before.some((c) => c.bars < 2)) throw new Error(`charts: ${JSON.stringify(before)}`);
+    await evaluate(() => document.querySelector('.analysis .chart-toggle').click());
+    const table = await evaluate(() => [...document.querySelector('.analysis [data-chart] .chart-table tbody').querySelectorAll('td')].map((td) => td.textContent.trim()));
+    if (JSON.stringify(table) !== JSON.stringify(before[0].values)) throw new Error(`table ${JSON.stringify(table)} != chart ${JSON.stringify(before[0].values)}`);
+    await evaluate(() => document.querySelector('.analysis .chart-toggle').click());
+    await shot("cross-check-charts");
+  });
+
   await check("field click grounds the image and clears without stale overlays", async () => {
     await page.click("loc=role:button[name='Show source for Ending balance']");
     await page.waitForSelector('[data-testid="source-highlight"]', { timeout: 10000 });
@@ -196,6 +210,12 @@ try {
   });
 
   await check("approve records the decision and audit trail", async () => {
+    const early = await evaluate(async () => {
+      const id = location.pathname.split('/').pop();
+      const res = await fetch(`/api/cases/${id}/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: 'What was the DTI?' }) });
+      return { status: res.status, launcher: !!document.querySelector('.ask-launch') };
+    });
+    if (early.status !== 409 || early.launcher) throw new Error(`open case must not accept questions: ${JSON.stringify(early)}`);
     await page.fill("#decision-note", "Verified ending balance against source scan");
     await evaluate(() => {
       window.__originalFetch = window.fetch;
@@ -218,6 +238,61 @@ try {
     const inputs = await evaluate(() => document.querySelectorAll('[aria-label$="flagged for review"]').length);
     if (inputs !== 0) throw new Error("fields still editable after decision");
     await shot("approved");
+  });
+
+  await check("approval shows a decision receipt in view with a way to continue", async () => {
+    const receipt = await evaluate(() => {
+      const el = document.querySelector('[aria-label="Decision recorded"]');
+      const box = el?.getBoundingClientRect();
+      return { found: !!el, top: box?.top, bottom: box?.bottom, vh: innerHeight, text: el?.textContent ?? '', focused: document.activeElement === el,
+        actions: [...(el?.querySelectorAll('button') ?? [])].map((b) => b.textContent.trim()) };
+    });
+    if (!receipt.found || receipt.bottom < 0 || receipt.top > receipt.vh) throw new Error(`receipt not in view: ${JSON.stringify(receipt)}`);
+    if (!/Approved/.test(receipt.text) || !/Recorded by/.test(receipt.text)) throw new Error(`receipt content: ${receipt.text}`);
+    if (!receipt.focused) throw new Error('focus did not move to the receipt');
+    if (!receipt.actions.includes('Back to queue')) throw new Error(`receipt actions: ${receipt.actions}`);
+    await shot("decision-receipt");
+  });
+
+  await check("closed case answers a question with sources the reviewer can open", async () => {
+    await page.click("loc=role:button[name='Ask about this case']");
+    await page.waitForSelector('#ask-window', { timeout: 3000 });
+    if (!(await evaluate(() => document.activeElement?.id === 'ask-input'))) throw new Error('focus did not move to the question box');
+    await evaluate(() => {
+      window.__lengths = new Set();
+      new MutationObserver(() => {
+        const bubbles = [...document.querySelectorAll('.ask-bubble-ai')];
+        const last = bubbles.at(-1);
+        if (last) window.__lengths.add(last.textContent.length);
+      }).observe(document.querySelector('.ask-log'), { childList: true, subtree: true, characterData: true });
+    });
+    await page.click("loc=role:button[name='What was the debt-to-income ratio?']");
+    await waitForFunction(() => /debt-to-income ratio was.*43%/i.test(document.querySelector('.ask-bubble-ai')?.textContent ?? ''), undefined, { timeout: 8000 });
+    const steps = await evaluate(() => window.__lengths.size);
+    if (steps < 3) throw new Error(`answer appeared in ${steps} step(s); it should stream`);
+    const sources = await evaluate(() => [...document.querySelectorAll('.ask-source')].map((b) => b.textContent.trim()));
+    if (sources.length === 0) throw new Error('answer came without sources');
+    await shot("ask-window");
+    await page.click("loc=role:button[name='Close case assistant']");
+    if (await evaluate(() => !!document.querySelector('#ask-window'))) throw new Error('window stayed open');
+    if (!(await evaluate(() => document.activeElement?.classList.contains('ask-launch')))) throw new Error('focus did not return to the launcher');
+  });
+
+  await check("the assistant lives inside its case and keeps one conversation per case", async () => {
+    const caseId = await evaluate(() => location.pathname.split('/').pop());
+    // Earlier runs leave their own keys in this browser profile; only this case's conversation matters here.
+    const stored = await evaluate((id) => Object.keys(localStorage).filter((k) => k.startsWith('case-review:ask:') && k.endsWith(`:${id}`)), caseId);
+    if (stored.length !== 1) throw new Error(`conversations stored for this case: ${JSON.stringify(stored)}`);
+    await page.click("loc=role:button[name='New case']");
+    await page.waitForSelector("text=Create case", { timeout: 3000 });
+    if (await evaluate(() => !!document.querySelector('.ask-launch'))) throw new Error('assistant visible on the new case form');
+    await page.click("loc=role:button[name='Cancel']");
+    await page.click(`.queue-item:has-text("Jordan")`);
+    await page.waitForSelector('.ask-launch', { timeout: 5000 });
+    await page.click("loc=role:button[name='Ask about this case']");
+    const restored = await evaluate(() => document.querySelectorAll('.ask-message-user').length);
+    if (restored !== 1) throw new Error(`conversation not restored: ${restored} user message(s)`);
+    await page.click("loc=role:button[name='Close case assistant']");
   });
   await check("create a retry case", async () => {
     await page.click("loc=role:button[name='New case']");
@@ -336,16 +411,11 @@ try {
           for (const name of ["Form 1040", "W‑2", "Form 1003", "Bank statement", "Pay stub"]) {
             const alreadySelected = await evaluate((label) => document.querySelector('.doc-strip button[aria-pressed="true"]')?.textContent.trim() === label, name);
             if (!alreadySelected) {
-              await evaluate(() => {
-                window.__previewLoaded = false;
-                document.querySelector('iframe.doc-frame').addEventListener('load', () => { window.__previewLoaded = true; }, { once: true });
-              });
               await page.click(`loc=role:button[name='${name}']`);
-              await waitForFunction(() => window.__previewLoaded === true, undefined, { timeout: 10000 });
             }
             await waitForPdfPreview();
-            const preview = await evaluate(() => ({ title: document.querySelector('iframe.doc-frame')?.title,
-              url: document.querySelector('iframe.doc-frame')?.src }));
+            const preview = await evaluate(() => ({ title: document.querySelector('.pdf-viewer')?.getAttribute('aria-label'),
+              url: document.querySelector('.pdf-viewer')?.dataset.url }));
             if (preview.title !== `${name} source`) throw new Error(`${name} preview mismatch: ${JSON.stringify(preview)}`);
             const response = await page.fetch(preview.url);
             if (response.status !== 200 || !response.headers['content-type']?.startsWith('application/pdf')) throw new Error(`${name} PDF response: ${response.status} ${response.headers['content-type']}`);

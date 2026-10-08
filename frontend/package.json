@@ -11,9 +11,12 @@
     "e2e": "bash e2e/run.sh"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.131",
+    "ai": "^7.0.128",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {

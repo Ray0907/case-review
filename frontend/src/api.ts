@@ -10,6 +10,8 @@ export type CaseRecord = {
 export type CaseSummary = CaseRecord & { recommendation: Recommendation; doc_count: number; blocker: string };
 export type SourceBox = { page: number; x: number; y: number; w: number; h: number; page_width: number; page_height: number };
 export type Field = { key: string; label: string; value: string | number; flagged: boolean; flag_reason: string; edited: boolean; source?: SourceBox };
+export type Citation = { document: string; key: string };
+export type Answer = { answer: string; citations: Citation[] };
 export type Judgment = { name: string; score: number; low: boolean; reason: string };
 export type DocumentDetail = {
   id: string; case_id: string; file_name: string; doc_type: string; status: DocStatus;
@@ -63,4 +65,5 @@ export const api = {
   decide: (caseId: string, action: "approve" | "reject" | "send_back", note: string) =>
     request<CaseDetail>(`/api/cases/${caseId}/decision`, json("POST", { action, note })),
   audit: (caseId: string) => request<AuditEntry[]>(`/api/cases/${caseId}/audit`),
+  ask: (caseId: string, question: string) => request<Answer>(`/api/cases/${caseId}/ask`, json("POST", { question })),
 };
