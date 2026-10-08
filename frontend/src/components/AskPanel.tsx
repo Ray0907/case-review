@@ -67,7 +67,8 @@ export default function AskPanel({ userId, detail, docs, onCite }: {
     fetch: friendlyFetch,
     prepareSendMessagesRequest: ({ messages }) => ({ body: { question: lastQuestion(messages) } }),
   }), [case_id]);
-  const chat = useChat<AskMessage>({ id: `${userId}:${case_id}`, messages: loadHistory(userId, case_id) as AskMessage[], transport });
+  const initial_messages = useMemo(() => loadHistory(userId, case_id) as AskMessage[], [userId, case_id]);
+  const chat = useChat<AskMessage>({ id: `${userId}:${case_id}`, messages: initial_messages, transport });
   const busy = chat.status === "submitted" || chat.status === "streaming";
 
   useEffect(() => { if (open) input.current?.focus(); }, [open]);

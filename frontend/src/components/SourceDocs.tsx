@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { api, type DocumentDetail, type Field } from "../api";
 import SourceViewer from "./SourceViewer";
-import { docLabel, requiredLabel, requiredTypes, stageLabel } from "../format";
+import { docLabel, processingStates, requiredLabel, requiredTypes, stageLabel } from "../format";
 
-const busy = new Set(["pending", "parsing", "classifying", "extracting", "judging"]);
+const busy = new Set(processingStates);
 
 export default function SourceDocs({ caseId, docs, selected, onSelect, locked, onChanged, sourceField, onClearSource }: {
   caseId: string; docs: DocumentDetail[]; selected?: DocumentDetail; onSelect: (id: string) => void; locked: boolean; onChanged: () => void;

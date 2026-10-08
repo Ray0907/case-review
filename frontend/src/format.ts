@@ -6,7 +6,7 @@ export const moneyWhole = (n: number | null | undefined) => (n == null ? "—" :
 export const pct = (n: number | null | undefined, digits = 1) => (n == null ? "—" : `${(n * 100).toFixed(digits)}%`);
 const dateTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const shortDateTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-export const shortTime = (seconds: number) => shortDateTime.format(new Date(seconds * 1000));
+const shortTime = (seconds: number) => shortDateTime.format(new Date(seconds * 1000));
 export const reviewTime = (seconds: number) => dateTime.format(new Date(seconds * 1000));
 
 const labels: Record<string, string> = {
@@ -23,6 +23,8 @@ const stages: Record<string, string> = {
   judging: "Scoring confidence", done: "Processed", failed: "Failed", unsupported: "Unsupported", superseded: "Replaced",
 };
 export const stageLabel = (s: string) => stages[s] ?? s;
+export const processingStates = ["pending", "parsing", "classifying", "extracting", "judging"];
+export const decisionLabels: Record<string, string> = { approved: "Approved", rejected: "Rejected", sent_back: "Sent back" };
 
 export const judgmentLabel = (n: string) =>
   ({ field_completeness: "Field completeness", document_authenticity: "Document authenticity", ocr_quality: "OCR extraction quality", income_consistency: "Income consistency" } as Record<string, string>)[n] ?? n;

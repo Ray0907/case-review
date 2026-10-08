@@ -37,7 +37,7 @@ function FieldInput({ doc, field, flagged, onSaved, onCancel }: {
           if (e.key === "Escape" && onCancel) { e.preventDefault(); onCancel(); }
         }} />
       <div className="field-edit-actions">
-        {onCancel && <button className="btn btn-bad" type="button" disabled={busy} onClick={onCancel}>Cancel edit</button>}
+        {onCancel && <button className="btn btn-link" type="button" disabled={busy} onClick={onCancel}>Cancel edit</button>}
         <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Confirming…" : "Confirm value"}</button>
       </div>
       {error && <span id={`field-error-${field.key}`} className="edit-hint" role="alert">{error}</span>}
@@ -64,7 +64,6 @@ export default function Fields({ doc, locked, onSaved, sourceKey, onSource }: {
           const warn = f.key === "bnpl_hits" && Number(f.value) > 0;
           const warn_style = warn ? { color: "var(--warn)" } : undefined;
           const display = `${fieldDisplay(f.key, f.value)}${warn ? " detected" : ""}`;
-          const mark = f.source && !f.edited ? " field-mark" : "";
           // Default state (source located) stays silent; only exceptions get a label.
           const [state_text, state_tone] = flagged ? ["Needs check", "warn"] : f.edited ? ["Verified by reviewer", "ok"]
             : f.source ? ["", "mute"] : ["No source match", "mute"];
@@ -84,8 +83,8 @@ export default function Fields({ doc, locked, onSaved, sourceKey, onSource }: {
                       requestAnimationFrame(() => document.getElementById(`edit-field-${f.key}`)?.focus());
                     }} />
                 : locked
-                  ? <span className={`field-value tabular${mark}`} style={warn_style}>{display}</span>
-                  : <button id={`edit-field-${f.key}`} type="button" className={`field-value field-value-btn tabular${mark}`} aria-label={`Edit ${f.label}`}
+                  ? <span className="field-value tabular" style={warn_style}>{display}</span>
+                  : <button id={`edit-field-${f.key}`} type="button" className="field-value field-value-btn tabular" aria-label={`Edit ${f.label}`}
                       style={warn_style} onClick={() => setEditing(f.key)}>
                       {display}
                     </button>}

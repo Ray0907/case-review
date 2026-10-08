@@ -1,18 +1,22 @@
 import type { Assessment } from "../api";
 import { money, pct } from "../format";
 
+const DTI_LIMIT = 0.43;
+const DTI_WARN = 0.41;
+
 export default function Figures({ a, requested }: { a: Assessment | null; requested: number }) {
   const dti = a?.dti ?? null;
-  const tone = dti == null ? "var(--on-dark-ink)" : dti > 0.43 ? "var(--on-dark-bad)" : dti >= 0.41 ? "var(--on-dark-warn)" : "var(--on-dark-ink)";
+  // The band picks the tone in CSS (data-band) and the note below, so the thresholds live here once.
+  const band = dti == null ? "none" : dti > DTI_LIMIT ? "bad" : dti >= DTI_WARN ? "warn" : "ok";
   const missingReason = a?.monthly_income == null || a.monthly_income <= 0 ? "Monthly income missing: upload a pay stub or W‑2." : a?.monthly_debt == null ? "Monthly debt missing: upload a bank statement." : "Check the extracted income and debt values before deciding.";
   return (
-    <section className="figures" aria-label="Case figures">
+    <section className="figures" data-band={band} aria-label="Case figures">
       <dl className="figure-list">
         <div className="figure figure-lead">
           <dt>Debt‑to‑income</dt>
-          <dd className="tabular" style={{ color: tone }}>{!a ? "—" : dti == null ? "Not computed" : pct(dti)}</dd>
+          <dd className="tabular">{!a ? "—" : dti == null ? "Not computed" : pct(dti)}</dd>
           <div className="dti-bar" aria-hidden="true">
-            <div className="dti-fill" style={{ width: `${Math.min((dti ?? 0) * 100, 100)}%`, background: tone }} />
+            <div className="dti-fill" style={{ width: `${Math.min((dti ?? 0) * 100, 100)}%` }} />
             <div className="dti-threshold" />
           </div>
           <span className="figure-note">QM limit 43%</span>
@@ -23,8 +27,8 @@ export default function Figures({ a, requested }: { a: Assessment | null; reques
       </dl>
       {!a && <p className="dti-of">Figures are calculated once every document is processed.</p>}
       {a && dti == null && <p className="dti-of" role="status">{missingReason}</p>}
-      {dti != null && dti > 0.43 && <p className="dti-flag">Above the 43% limit</p>}
-      {dti != null && dti >= 0.41 && dti <= 0.43 && <p className="dti-flag dti-flag-warn">Within 2 points of the 43% limit</p>}
+      {band === "bad" && <p className="dti-flag">Above the 43% limit</p>}
+      {band === "warn" && <p className="dti-flag">Within 2 points of the 43% limit</p>}
     </section>
   );
 }

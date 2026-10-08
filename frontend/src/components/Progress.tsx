@@ -1,3 +1,5 @@
+import CheckIcon from "./CheckIcon";
+
 export type Step = { label: string; meta: string; done: boolean };
 
 export default function Progress({ steps }: { steps: Step[] }) {
@@ -11,7 +13,7 @@ export default function Progress({ steps }: { steps: Step[] }) {
           aria-current={i === active ? "step" : undefined}>
           <span className="step-index" aria-hidden="true">
             {done_at(i)
-              ? <svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              ? <CheckIcon />
               : i + 1}
           </span>
           <span className="step-text">

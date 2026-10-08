@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type CaseDetail, type CaseSummary, type DocumentDetail, type User } from "../api";
-import { pct, requiredTypes } from "../format";
+import { decisionLabels, pct, processingStates, requiredTypes } from "../format";
 import { useCaseEvents } from "../useCaseEvents";
 import Queue from "../components/Queue";
 import NewCase from "../components/NewCase";
@@ -22,19 +22,17 @@ const statusPill: Record<string, [string, string]> = {
   approved: ["pill-good", "Approved"], rejected: ["pill-bad", "Rejected"], sent_back: ["pill-warn", "Sent back"],
 };
 
-const decided_label: Record<string, string> = { approved: "Approved", rejected: "Rejected", sent_back: "Sent back" };
-const processing_states = ["pending", "parsing", "classifying", "extracting", "judging"];
 
 function reviewSteps(detail: CaseDetail, docs: DocumentDetail[], unresolved: number) {
   const received = docs.filter((d) => d.status === "done").length;
   const dti = detail.assessment?.dti ?? null;
-  const decided = detail.case.status in decided_label;
-  const processing = docs.some((d) => processing_states.includes(d.status));
+  const decided = detail.case.status in decisionLabels;
+  const processing = docs.some((d) => processingStates.includes(d.status));
   return [
     { label: "Documents", meta: `${received} of ${requiredTypes.length}`, done: received >= requiredTypes.length && !processing },
     { label: "Verify", meta: unresolved > 0 ? `${unresolved} to check` : "All checked", done: unresolved === 0 && received > 0 },
     { label: "Assess", meta: dti == null ? "Waiting" : pct(dti), done: dti != null },
-    { label: "Decide", meta: decided ? decided_label[detail.case.status] : "Pending", done: decided },
+    { label: "Decide", meta: decided ? decisionLabels[detail.case.status] : "Pending", done: decided },
   ];
 }
 
@@ -186,7 +184,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
                   </div>
                 </div>
               </div>
-              {detail.case.status in decided_label && (
+              {detail.case.status in decisionLabels && (
                 <DecisionReceipt detail={detail} docs={docs} panel={receipt}
                   next={cases.filter((c) => c.id !== detail.case.id && c.status === "needs_review").sort((a, b) => b.created_at - a.created_at)[0]}
                   onNext={(id) => navigate(`/cases/${id}`)} onQueue={() => navigate("/cases")} />
@@ -211,7 +209,7 @@ export default function Workspace({ user, onSignedOut }: { user: User; onSignedO
           )}
         </main>
       </div>
-      {!creating && caseId && detail?.case.id === caseId && detail.case.status in decided_label &&
+      {!creating && caseId && detail?.case.id === caseId && detail.case.status in decisionLabels &&
         <AskPanel key={`${user.id}:${caseId}`} userId={user.id} detail={detail} docs={docs} onCite={openCitation} />}
     </>
   );

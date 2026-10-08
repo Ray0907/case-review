@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { api, type AuditEntry, type CaseDetail, type CaseSummary, type DocumentDetail } from "../api";
 import { pct, requiredTypes, reviewTime } from "../format";
+import CheckIcon from "./CheckIcon";
 
 const titles: Record<string, string> = { approved: "Approved", rejected: "Rejected", sent_back: "Sent back for documents" };
 
@@ -19,7 +20,7 @@ export default function DecisionReceipt({ detail, docs, next, panel, onNext, onQ
   return (
     <section ref={panel} className="receipt" tabIndex={-1} role="region" aria-label="Decision recorded">
       <span className="receipt-mark" aria-hidden="true">
-        <svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <CheckIcon />
       </span>
       <div className="receipt-body">
         <h2>{titles[detail.case.status]}</h2>
